@@ -13,6 +13,11 @@ import urllib.request
 import zipfile
 
 FILES = ("prod.keys", "base.nsp", "upd4-0-1.nsp")
+INPUT_NAMES = {
+    "prod.keys": ("prod.keys",),
+    "base.nsp": ("base.nsp", "game.nsp", "game"),
+    "upd4-0-1.nsp": ("upd4-0-1.nsp",),
+}
 
 
 def download():
@@ -41,21 +46,26 @@ def download():
             raise RuntimeError("Could not download the input ZIP. Check the link, download permission, quota, and expiry.") from None
 
         with zipfile.ZipFile(archive) as package:
+            selected = {}
             for name in FILES:
-                matches = [item for item in package.infolist() if item.filename == name]
+                matches = [item for item in package.infolist()
+                           if item.filename.casefold() in INPUT_NAMES[name]]
                 if len(matches) != 1:
-                    raise ValueError(f"The ZIP must contain exactly one {name} at its root.")
+                    accepted = " or ".join(INPUT_NAMES[name])
+                    raise ValueError(f"The ZIP must contain exactly one {accepted} at its root.")
                 item = matches[0]
                 if item.is_dir() or stat.S_ISLNK(item.external_attr >> 16) or item.file_size == 0:
                     raise ValueError(f"{name} must be a nonempty regular file.")
                 if item.file_size > 16 * 1024**3:
                     raise ValueError(f"{name} exceeds the 16 GiB input limit.")
-            needed = sum(package.getinfo(name).file_size for name in FILES)
+                selected[name] = item
+            needed = sum(item.file_size for item in selected.values())
             if shutil.disk_usage(".").free < needed + 8 * 1024**3:
                 raise RuntimeError("Not enough disk space for the inputs plus 8 GiB of build space.")
-            # Copy only the three exact filenames; never extract arbitrary archive paths.
-            for name in FILES:
-                with package.open(name) as source, open(name, "wb") as target:
+            # Normalize accepted input names to the build's fixed destinations.
+            # Never extract arbitrary archive paths.
+            for name, item in selected.items():
+                with package.open(item) as source, open(name, "wb") as target:
                     shutil.copyfileobj(source, target)
                 os.chmod(name, 0o600)
     print("The three private build inputs are ready.")
