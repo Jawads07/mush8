@@ -1,0 +1,118 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/ios-ipa.yml
+      - tools/cloud-ipa.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mush8-ios-ipa
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Prepare Apple and Rust tools
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          if ! xcrun --sdk iphoneos metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun --sdk iphoneos metal --version
+          command -v xcodegen >/dev/null || brew install xcodegen
+          TOOLCHAIN=$(sed -n 's/^TOOLCHAIN=//p' make-ios.sh)
+          test -n "$TOOLCHAIN"
+          rustup toolchain install "$TOOLCHAIN" --profile minimal
+          rustup override set "$TOOLCHAIN"
+          rustup target add aarch64-apple-ios --toolchain "$TOOLCHAIN"
+
+      - name: Compile host tools
+        run: cargo build --release --locked
+
+      - name: Check private build inputs
+        id: inputs
+        env:
+          MUSH8_INPUTS_URL: ${{ secrets.MUSH8_INPUTS_URL }}
+          MUSH8_IPA_PASSWORD: ${{ secrets.MUSH8_IPA_PASSWORD }}
+        run: |
+          if [[ -n "$MUSH8_INPUTS_URL" && -n "$MUSH8_IPA_PASSWORD" ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## IPA is waiting for your files
+          The host-tool compilation passed. No IPA was created.
+
+          Add repository Actions secrets:
+          - `MUSH8_INPUTS_URL`: an expiring direct HTTPS download URL for a ZIP with `prod.keys`, `base.nsp`, and `upd4-0-1.nsp` at its root.
+          - `MUSH8_IPA_PASSWORD`: a strong password used to encrypt the IPA artifact.
+
+          Then select **Build iOS IPA → Run workflow**. See `docs/ipa-cloud-build.md`.
+          EOF
+          fi
+
+      - name: Download your game dumps privately
+        if: steps.inputs.outputs.ready == 'true'
+        env:
+          MUSH8_INPUTS_URL: ${{ secrets.MUSH8_INPUTS_URL }}
+        run: python3 tools/cloud-ipa.py download
+
+      - name: Build IPA
+        if: steps.inputs.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          bash make-ios.sh --ipa
+          python3 tools/cloud-ipa.py verify
+
+      - name: Encrypt IPA for download
+        if: steps.inputs.outputs.ready == 'true'
+        env:
+          MUSH8_IPA_PASSWORD: ${{ secrets.MUSH8_IPA_PASSWORD }}
+        run: |
+          set -euo pipefail
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 600000 \
+            -in build/Mush8.ipa -out build/Mush8.ipa.enc \
+            -pass env:MUSH8_IPA_PASSWORD
+
+      - name: Upload encrypted IPA
+        if: steps.inputs.outputs.ready == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Mush8-IPA-encrypted
+          path: build/Mush8.ipa.enc
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Report IPA result
+        if: success() && steps.inputs.outputs.ready == 'true'
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## IPA built
+          Download and unzip **Mush8-IPA-encrypted** below. Decrypt `Mush8.ipa.enc` using the password you put in `MUSH8_IPA_PASSWORD` (instructions in `docs/ipa-cloud-build.md`).
+
+          Install the resulting IPA with AltStore or SideStore. This build has not been tested on a physical iPhone.
+          EOF
+
+      - name: Remove private build files
+        if: always()
+        run: |
+          rm -f prod.keys base.nsp upd4-0-1.nsp build/Mush8.ipa build/Mush8.ipa.enc
+          rm -rf work target/ios target/ios-res target/ios-xcode
