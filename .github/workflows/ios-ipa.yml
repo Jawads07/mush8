@@ -6,6 +6,9 @@ on:
     paths:
       - .github/workflows/ios-ipa.yml
       - tools/cloud-ipa.py
+      - make-ios.sh
+      - crates/**
+      - ios/**
 
 permissions:
   contents: read
@@ -75,6 +78,9 @@ jobs:
 
       - name: Compile host tools
         run: cargo build --release --locked
+
+      - name: Test GPU heap boundaries
+        run: cargo test --release --locked -p nxhost heap_tests -- --nocapture
 
       - name: Build IPA
         if: steps.inputs.outputs.ready == 'true'

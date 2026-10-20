@@ -75,10 +75,10 @@ def verify():
     with zipfile.ZipFile("build/Mush8.ipa") as package:
         names = set(package.namelist())
         prefix = "Payload/Mush8.app/"
-        for name in ("Info.plist", "nxhost", "modules/main.npdm", "shaders/index.tsv", "shaders/guest.tsv"):
+        for name in ("Info.plist", "nxhost", "modules/main.npdm", "shaders/heap-segments-v2/index.tsv", "shaders/heap-segments-v2/guest.tsv"):
             if prefix + name not in names or package.getinfo(prefix + name).file_size == 0:
                 raise ValueError(f"IPA is missing a nonempty {name}.")
-        if not any(name.startswith(prefix + "shaders/") and name.endswith(".metallib") for name in names):
+        if not any(name.startswith(prefix + "shaders/heap-segments-v2/") and name.endswith(".metallib") for name in names):
             raise ValueError("IPA contains no compiled Metal shader libraries.")
         if any(Path(name).name in FILES for name in names):
             raise ValueError("IPA unexpectedly contains private input files.")

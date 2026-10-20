@@ -44,3 +44,17 @@ Install `Mush8.ipa` with AltStore or SideStore. It is ad-hoc signed for sideload
 the installer signs it for your account. The project targets iOS 26 or later.
 Copy your game files and dumped Firmware folder into the app as described in README.md.
 Building an IPA does not verify that it works on a physical iPhone.
+
+## A16 GPU heap compatibility
+
+The renderer splits the guest heap into Metal buffers no larger than the device's
+maxBufferLength. Buffer bindings that cross a segment boundary use staging, and
+shader global-memory accesses resolve the correct segment. This addresses the
+reported failure to wrap the roughly 3 GiB guest heap on A16; device testing is
+still required to confirm the black-screen symptom is resolved.
+
+The segmentation changes and boundary tests are adapted from lyccccy's
+[c22dev/mush8 PR #3](https://github.com/c22dev/mush8/pull/3),
+commit 9080fa00080bf1b74ecf44ac4729cf17827bda6f. Unrelated changes are excluded.
+The iOS packager and verifier use the same heap-segments-v2 shader directory as
+the renderer, ensuring old shader libraries with the previous ABI are not used.
