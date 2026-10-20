@@ -1,5 +1,7 @@
 """Private inputs and structural IPA verification for the macOS cloud build."""
 
+import contextlib
+import io
 import os
 from pathlib import Path
 import shutil
@@ -14,20 +16,29 @@ FILES = ("prod.keys", "base.nsp", "upd4-0-1.nsp")
 
 
 def download():
-    url = os.environ["MUSH8_INPUTS_URL"]
-    if urllib.parse.urlsplit(url).scheme != "https":
+    url = os.environ["MUSH8_INPUTS_URL"].strip()
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != "https":
         raise ValueError("The input archive must use an HTTPS URL.")
     # Store the URL only in an Actions secret, never in the workflow or logs.
     with tempfile.TemporaryDirectory() as directory:
         archive = Path(directory) / "inputs.zip"
         try:
-            with urllib.request.urlopen(url, timeout=120) as response:
-                if urllib.parse.urlsplit(response.url).scheme != "https":
-                    raise ValueError("The download redirected away from HTTPS.")
-                with archive.open("wb") as out:
-                    shutil.copyfileobj(response, out)
+            if parsed.hostname == "drive.google.com":
+                import gdown
+
+                # Drive serves a confirmation page for large files. Keep both the
+                # share URL and any resolved download URLs out of public CI logs.
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    gdown.download(url=url, output=str(archive), quiet=True, use_cookies=False)
+            else:
+                with urllib.request.urlopen(url, timeout=120) as response:
+                    if urllib.parse.urlsplit(response.url).scheme != "https":
+                        raise ValueError("The download redirected away from HTTPS.")
+                    with archive.open("wb") as out:
+                        shutil.copyfileobj(response, out)
         except Exception:
-            raise RuntimeError("Could not download the private input ZIP. Check its URL and expiry.") from None
+            raise RuntimeError("Could not download the input ZIP. Check the link, download permission, quota, and expiry.") from None
 
         with zipfile.ZipFile(archive) as package:
             for name in FILES:

@@ -8,8 +8,12 @@ The full build still requires your own game dumps: game code is linked into the 
 
 1. Create a ZIP containing these three files at its root, with these exact names:
    `prod.keys`, `base.nsp`, and `upd4-0-1.nsp` (update 4.0.1).
-2. Store the ZIP somewhere that provides an expiring direct HTTPS download URL.
-   A normal preview/share page is not a direct download. Do not commit the ZIP or keys.
+2. Upload the ZIP to Google Drive, then open **Share → General access → Anyone with
+   the link**, choose **Viewer**, and copy the file's link. Keep downloads enabled.
+   The downloader handles Drive's large-file confirmation page. Store the link only
+   in the secret below; anyone who obtains it can download the ZIP. After the build,
+   you can switch the file back to **Restricted**. A direct HTTPS download URL from
+   another host also works. Do not commit the ZIP or keys.
 3. Open **Settings → Secrets and variables → Actions → New repository secret**.
    Add `MUSH8_INPUTS_URL` with the download URL, and `MUSH8_IPA_PASSWORD` with a strong,
    unique password. Keep the password: it is needed to decrypt the result.
