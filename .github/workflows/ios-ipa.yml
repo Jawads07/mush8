@@ -50,9 +50,8 @@ jobs:
         id: inputs
         env:
           MUSH8_INPUTS_URL: ${{ secrets.MUSH8_INPUTS_URL }}
-          MUSH8_IPA_PASSWORD: ${{ secrets.MUSH8_IPA_PASSWORD }}
         run: |
-          if [[ -n "$MUSH8_INPUTS_URL" && -n "$MUSH8_IPA_PASSWORD" ]]; then
+          if [[ -n "$MUSH8_INPUTS_URL" ]]; then
             echo 'ready=true' >> "$GITHUB_OUTPUT"
           else
             echo 'ready=false' >> "$GITHUB_OUTPUT"
@@ -60,9 +59,8 @@ jobs:
           ## IPA is waiting for your files
           The host-tool compilation passed. No IPA was created.
 
-          Add repository Actions secrets:
+          Add this repository Actions secret:
           - `MUSH8_INPUTS_URL`: a Google Drive file-sharing link (Anyone with the link, Viewer) or direct HTTPS download URL for a ZIP with `prod.keys`, `base.nsp`, and `upd4-0-1.nsp` at its root.
-          - `MUSH8_IPA_PASSWORD`: a strong password used to encrypt the IPA artifact.
 
           Then select **Build iOS IPA → Run workflow**. See `docs/ipa-cloud-build.md`.
           EOF
@@ -85,22 +83,21 @@ jobs:
           bash make-ios.sh --ipa
           python3 tools/cloud-ipa.py verify
 
-      - name: Encrypt IPA for download
+      - name: Protect IPA for automatic delivery
         if: steps.inputs.outputs.ready == 'true'
-        env:
-          MUSH8_IPA_PASSWORD: ${{ secrets.MUSH8_IPA_PASSWORD }}
         run: |
           set -euo pipefail
-          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 600000 \
-            -in build/Mush8.ipa -out build/Mush8.ipa.enc \
-            -pass env:MUSH8_IPA_PASSWORD
+          openssl cms -encrypt -binary -aes-256-gcm \
+            -in build/Mush8.ipa -out build/Mush8.ipa.cms -outform DER \
+            -recip tools/ipa-delivery-cert.pem \
+            -keyopt rsa_padding_mode:oaep -keyopt rsa_oaep_md:sha256
 
-      - name: Upload encrypted IPA
+      - name: Upload protected IPA transfer
         if: steps.inputs.outputs.ready == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: Mush8-IPA-encrypted
-          path: build/Mush8.ipa.enc
+          name: Mush8-IPA-transfer
+          path: build/Mush8.ipa.cms
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -110,7 +107,7 @@ jobs:
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           ## IPA built
-          Download and unzip **Mush8-IPA-encrypted** below. Decrypt `Mush8.ipa.enc` using the password you put in `MUSH8_IPA_PASSWORD` (instructions in `docs/ipa-cloud-build.md`).
+          The **Mush8-IPA-transfer** artifact below is automatically protected for delivery. Tell the build assistant this run is complete so it can retrieve and decrypt the artifact, then provide the normal `Mush8.ipa` privately. You do not need to create or enter a password.
 
           Install the resulting IPA with AltStore or SideStore. This build has not been tested on a physical iPhone.
           EOF
@@ -118,5 +115,5 @@ jobs:
       - name: Remove private build files
         if: always()
         run: |
-          rm -f prod.keys base.nsp upd4-0-1.nsp build/Mush8.ipa build/Mush8.ipa.enc
+          rm -f prod.keys base.nsp upd4-0-1.nsp build/Mush8.ipa build/Mush8.ipa.cms
           rm -rf work target/ios target/ios-res target/ios-xcode

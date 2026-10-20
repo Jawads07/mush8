@@ -15,32 +15,27 @@ The full build still requires your own game dumps: game code is linked into the 
    you can switch the file back to **Restricted**. A direct HTTPS download URL from
    another host also works. Do not commit the ZIP or keys.
 3. Open **Settings → Secrets and variables → Actions → New repository secret**.
-   Add `MUSH8_INPUTS_URL` with the download URL, and `MUSH8_IPA_PASSWORD` with a strong,
-   unique password. Keep the password: it is needed to decrypt the result.
+   Add `MUSH8_INPUTS_URL` with the download URL. No password secret is required.
 4. Open **Actions → Build iOS IPA → Run workflow**, choose `main`, and run it.
    If the fork's Actions page asks you to enable workflows, enable them first.
 
-The first source-tools check runs when the workflow is added. Without both secrets,
+The first source-tools check runs when the workflow is added. Without the URL secret,
 it compiles the host tools and reports that the IPA is waiting for your files.
 It does not claim to have produced an IPA. Full builds may take 20–60 minutes or more.
 They can still fail on toolchain, runner disk-space, or game-data issues.
 
-## Download and decrypt
+## Download
 
-After a successful full build, download the **Mush8-IPA-encrypted** artifact from the
-run page and unzip it. Only an encrypted IPA is uploaded, since this is a public
-repository and the IPA embeds game code. No dumps or build directories are uploaded.
-The encrypted artifact expires after one day.
+After a successful full build, tell the build assistant the run is complete. It will
+retrieve the **Mush8-IPA-transfer** artifact, decrypt it, and deliver the normal
+`Mush8.ipa` privately. You do not need to create or enter a password.
 
-On Windows, open Git Bash in the folder containing `Mush8.ipa.enc` and run:
-
-```bash
-openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
-  -in Mush8.ipa.enc -out Mush8.ipa
-```
-
-Enter the password you saved in `MUSH8_IPA_PASSWORD`. The password is requested
-interactively, so it does not appear in shell history.
+The public artifact contains only `Mush8.ipa.cms`, encrypted automatically with the
+public certificate in `tools/ipa-delivery-cert.pem`. The matching private delivery
+key is retained separately in the build owner's files and is never committed or
+sent to GitHub. The transfer artifact expires after one day. It cannot be installed
+directly; the assistant must first decrypt it. Original dumps and build directories
+are not uploaded as artifacts.
 
 Install `Mush8.ipa` with AltStore or SideStore. It is ad-hoc signed for sideloading;
 the installer signs it for your account. The project targets iOS 26 or later.
