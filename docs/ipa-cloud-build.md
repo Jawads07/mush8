@@ -9,7 +9,8 @@ The full build still requires your own game dumps: game code is linked into the 
 1. Create a ZIP containing these three files at its root, with these exact names:
    `prod.keys`, `base.nsp`, and `upd4-0-1.nsp` (update 4.0.1).
    The base game may also be named `game.nsp` or `game`; the downloader renames
-   it automatically. Include only one base-game file. Filename case is ignored.
+   it automatically. The update may also be named `update.nsp` or `update`.
+   Include only one file for each input. Filename case is ignored.
 2. Upload the ZIP to Google Drive, then open **Share → General access → Anyone with
    the link**, choose **Viewer**, and copy the file's link. Keep downloads enabled.
    The downloader handles Drive's large-file confirmation page. Store the link only

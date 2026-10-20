@@ -26,6 +26,36 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check private build inputs
+        id: inputs
+        env:
+          MUSH8_INPUTS_URL: ${{ secrets.MUSH8_INPUTS_URL }}
+        run: |
+          if [[ -n "$MUSH8_INPUTS_URL" ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## IPA is waiting for your files
+          No input URL is configured, so this run will check the host tools only. No IPA will be created.
+
+          Add this repository Actions secret:
+          - `MUSH8_INPUTS_URL`: a Google Drive file-sharing link (Anyone with the link, Viewer) or direct HTTPS download URL for a ZIP with `prod.keys`, `base.nsp`, and `upd4-0-1.nsp` at its root.
+
+          Then select **Build iOS IPA → Run workflow**. See `docs/ipa-cloud-build.md`.
+          EOF
+          fi
+
+      - name: Download your game dumps privately
+        if: steps.inputs.outputs.ready == 'true'
+        env:
+          MUSH8_INPUTS_URL: ${{ secrets.MUSH8_INPUTS_URL }}
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/mush8-download-env"
+          "$RUNNER_TEMP/mush8-download-env/bin/python" -m pip install --disable-pip-version-check 'gdown==6.1.0'
+          "$RUNNER_TEMP/mush8-download-env/bin/python" tools/cloud-ipa.py download
+
       - name: Prepare Apple and Rust tools
         run: |
           set -euo pipefail
@@ -45,36 +75,6 @@ jobs:
 
       - name: Compile host tools
         run: cargo build --release --locked
-
-      - name: Check private build inputs
-        id: inputs
-        env:
-          MUSH8_INPUTS_URL: ${{ secrets.MUSH8_INPUTS_URL }}
-        run: |
-          if [[ -n "$MUSH8_INPUTS_URL" ]]; then
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
-          ## IPA is waiting for your files
-          The host-tool compilation passed. No IPA was created.
-
-          Add this repository Actions secret:
-          - `MUSH8_INPUTS_URL`: a Google Drive file-sharing link (Anyone with the link, Viewer) or direct HTTPS download URL for a ZIP with `prod.keys`, `base.nsp`, and `upd4-0-1.nsp` at its root.
-
-          Then select **Build iOS IPA → Run workflow**. See `docs/ipa-cloud-build.md`.
-          EOF
-          fi
-
-      - name: Download your game dumps privately
-        if: steps.inputs.outputs.ready == 'true'
-        env:
-          MUSH8_INPUTS_URL: ${{ secrets.MUSH8_INPUTS_URL }}
-        run: |
-          set -euo pipefail
-          python3 -m venv "$RUNNER_TEMP/mush8-download-env"
-          "$RUNNER_TEMP/mush8-download-env/bin/python" -m pip install --disable-pip-version-check 'gdown==6.1.0'
-          "$RUNNER_TEMP/mush8-download-env/bin/python" tools/cloud-ipa.py download
 
       - name: Build IPA
         if: steps.inputs.outputs.ready == 'true'

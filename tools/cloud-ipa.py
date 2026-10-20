@@ -16,7 +16,7 @@ FILES = ("prod.keys", "base.nsp", "upd4-0-1.nsp")
 INPUT_NAMES = {
     "prod.keys": ("prod.keys",),
     "base.nsp": ("base.nsp", "game.nsp", "game"),
-    "upd4-0-1.nsp": ("upd4-0-1.nsp",),
+    "upd4-0-1.nsp": ("upd4-0-1.nsp", "update.nsp", "update"),
 }
 
 
